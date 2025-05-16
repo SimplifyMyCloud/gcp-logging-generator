@@ -1,0 +1,50 @@
+logging:
+  receivers:
+    structured_logs:
+      type: files
+      include_paths:
+        - /var/log/custom/structured.log
+      parser: json
+    
+    plain_logs:
+      type: files
+      include_paths:
+        - /var/log/custom/plain.log
+      
+    error_logs:
+      type: files
+      include_paths:
+        - /var/log/custom/error.log
+      
+  service:
+    pipelines:
+      structured_pipeline:
+        receivers:
+          - structured_logs
+      
+      plain_pipeline:
+        receivers:
+          - plain_logs
+      
+      error_pipeline:
+        receivers:
+          - error_logs
+
+metrics:
+  receivers:
+    hostmetrics:
+      type: hostmetrics
+      collection_interval: 60s
+  
+  processors:
+    metrics_filter:
+      type: exclude_metrics
+      metrics_pattern: []
+  
+  service:
+    pipelines:
+      default_pipeline:
+        receivers:
+          - hostmetrics
+        processors:
+          - metrics_filter
