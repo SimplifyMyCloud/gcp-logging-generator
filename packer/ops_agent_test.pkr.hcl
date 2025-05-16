@@ -1,3 +1,12 @@
+packer {
+  required_plugins {
+    googlecompute = {
+      version = ">= 1.1.1"
+      source  = "github.com/hashicorp/googlecompute"
+    }
+  }
+}
+
 source "googlecompute" "ops_agent_test" {
   project_id        = "simplifymycloud-dev"
   source_image      = "debian-11-bullseye-v20220303"
@@ -14,14 +23,14 @@ build {
     inline = [
       "sudo apt-get update",
       "sudo apt-get install -y curl gnupg",
-
+      
       # Install ops-agent
       "curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh",
       "sudo bash add-google-cloud-ops-agent-repo.sh --also-install",
-
+      
       # Install Go if using Go script
       "sudo apt-get install -y golang-go",
-
+      
       # Create directories
       "sudo mkdir -p /var/log/custom",
       "sudo mkdir -p /opt/log-generator"
@@ -30,7 +39,7 @@ build {
 
   # Copy your log generator script
   provisioner "file" {
-    source      = "log_generator.go"
+    source      = "log_generator.go"  # or log_generator.go and main.go
     destination = "/opt/log-generator/"
   }
 
@@ -43,8 +52,8 @@ build {
   provisioner "shell" {
     inline = [
       "sudo mv /tmp/config.yaml /etc/google-cloud-ops-agent/config.yaml",
-      "sudo chmod +x /opt/log-generator/log_generator.go",
-
+      "sudo chmod +x /opt/log-generator/log_generator.sh",
+      
       # Set up as systemd service
       "echo '[Unit]\\nDescription=Log Generator Service\\nAfter=network.target\\n\\n[Service]\\nExecStart=/opt/log-generator/log_generator.sh\\nRestart=always\\n\\n[Install]\\nWantedBy=multi-user.target' | sudo tee /etc/systemd/system/log-generator.service",
       "sudo systemctl daemon-reload",
