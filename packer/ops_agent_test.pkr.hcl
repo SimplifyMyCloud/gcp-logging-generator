@@ -30,7 +30,7 @@ build {
 
   # Copy your log generator script
   provisioner "file" {
-    source      = "log_generator.sh"  # or log_generator.go and main.go
+    source      = "log_generator.go"
     destination = "/opt/log-generator/"
   }
 
@@ -43,7 +43,7 @@ build {
   provisioner "shell" {
     inline = [
       "sudo mv /tmp/config.yaml /etc/google-cloud-ops-agent/config.yaml",
-      "sudo chmod +x /opt/log-generator/log_generator.sh",
+      "sudo chmod +x /opt/log-generator/log_generator.go",
       
       # Set up as systemd service
       "echo '[Unit]\\nDescription=Log Generator Service\\nAfter=network.target\\n\\n[Service]\\nExecStart=/opt/log-generator/log_generator.sh\\nRestart=always\\n\\n[Install]\\nWantedBy=multi-user.target' | sudo tee /etc/systemd/system/log-generator.service",
