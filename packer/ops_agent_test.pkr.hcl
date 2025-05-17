@@ -8,7 +8,7 @@ packer {
 }
 
 source "googlecompute" "ops_agent_test" {
-  project_id           = "your-project-id"  # CHANGE THIS TO YOUR PROJECT ID
+  project_id           = "simplifymycloud-dev"
   source_image         = "debian-12-bookworm-v20240516"  # Latest Debian 12 image
   source_image_family  = "debian-12"
   source_image_project_id = ["debian-cloud"]  # Debian project
@@ -46,7 +46,7 @@ build {
   }
 
   provisioner "file" {
-    source      = "../bin/log-generator"
+    source      = "../ops-agent-logs/bin/log-generator"
     destination = "/tmp/log-generator"
   }
 
