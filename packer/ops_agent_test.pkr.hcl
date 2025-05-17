@@ -8,14 +8,16 @@ packer {
 }
 
 source "googlecompute" "ops_agent_test" {
-  project_id             = "your-project-id"  # CHANGE THIS TO YOUR PROJECT ID
-  source_image           = "debian-11-bullseye-v20240510"
-  source_image_project_id = ["debian-cloud"]
-  ssh_username           = "packer"
-  zone                   = "us-central1-a"
-  image_name             = "ops-agent-test-{{timestamp}}"
-  image_description      = "Test image for ops-agent log collection"
-  machine_type           = "e2-medium"
+  project_id          = "simplifymycloud-dev"  # CHANGE THIS TO YOUR PROJECT ID
+  source_image_family = "debian-11"
+  ssh_username        = "packer"
+  zone                = "us-west1-a"
+  image_name          = "ops-agent-test-{{timestamp}}"
+  image_description   = "Test image for ops-agent log collection"
+  machine_type        = "e2-medium"
+  scopes              = [
+    "https://www.googleapis.com/auth/cloud-platform"
+  ]
 }
 
 build {
