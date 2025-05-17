@@ -20,7 +20,6 @@ source "googlecompute" "ops_agent_test" {
   ssh_username        = "sa_packer_sa_simplifymycloud_dev_iam_gserviceaccount_com"
   
   ssh_timeout         = "10m"
-  startup_script_timeout = "5m"
   
   scopes              = [
     "https://www.googleapis.com/auth/cloud-platform"
