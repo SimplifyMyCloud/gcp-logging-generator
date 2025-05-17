@@ -8,22 +8,37 @@ packer {
 }
 
 source "googlecompute" "ops_agent_test" {
-  project_id          = "simplifymycloud-dev"  # CHANGE THIS TO YOUR PROJECT ID
+  project_id          = "your-project-id"  # CHANGE THIS TO YOUR PROJECT ID
   source_image_family = "debian-11"
   ssh_username        = "packer"
   zone                = "us-west1-a"
   image_name          = "ops-agent-test-{{timestamp}}"
   image_description   = "Test image for ops-agent log collection"
   machine_type        = "e2-medium"
+  
+  # SSH key configuration
+  ssh_private_key_file = "~/.ssh/packer_gcp"
+  
+  # Add SSH key to the instance
+  metadata = {
+    "ssh-keys" = "packer:${file("~/.ssh/packer_gcp.pub")}"
+    "enable-oslogin" = "FALSE"
+  }
+  
+  # Authentication scopes
   scopes              = [
     "https://www.googleapis.com/auth/cloud-platform"
   ]
+  
+  # Wait longer for instance to be ready
+  startup_script_timeout = "5m"
 }
 
 build {
   sources = ["source.googlecompute.ops_agent_test"]
 
   provisioner "shell" {
+    pause_before = "30s"
     inline = [
       "sudo apt-get update",
       "sudo apt-get install -y curl",
@@ -38,7 +53,7 @@ build {
   }
 
   provisioner "file" {
-    source      = "../ops-agent-logs/bin/log-generator"
+    source      = "../bin/log-generator"
     destination = "/tmp/log-generator"
   }
 
