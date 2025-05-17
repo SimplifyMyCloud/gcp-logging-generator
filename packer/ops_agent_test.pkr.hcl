@@ -8,7 +8,7 @@ packer {
 }
 
 source "googlecompute" "ops_agent_test" {
-  project_id          = "your-project-id"  # CHANGE THIS TO YOUR PROJECT ID
+  project_id          = "simplifymycloud-dev"  # CHANGE THIS TO YOUR PROJECT ID
   source_image_family = "debian-11"
   ssh_username        = "packer"
   zone                = "us-west1-a"
@@ -53,7 +53,7 @@ build {
   }
 
   provisioner "file" {
-    source      = "../bin/log-generator"
+    source      = "../ops-agent-logs/bin/log-generator"
     destination = "/tmp/log-generator"
   }
 
