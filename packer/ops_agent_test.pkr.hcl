@@ -8,14 +8,14 @@ packer {
 }
 
 source "googlecompute" "ops_agent_test" {
-  project_id           = "simplifymycloud-dev"
-  source_image         = "debian-12-bookworm-v20240516"  # Latest Debian 12 image
-  source_image_family  = "debian-12"
-  source_image_project_id = ["debian-cloud"]  # Debian project
-  ssh_username         = "admin"  # Debian uses "admin" by default
-  zone                 = "us-central1-a"
-  image_name           = "ops-agent-test-{{timestamp}}"
-  image_description    = "Test image for ops-agent log collection with Go log generator on Debian"
+  project_id             = "your-project-id"  # CHANGE THIS TO YOUR PROJECT ID
+  source_image           = "debian-11-bullseye-v20240510"
+  source_image_project_id = ["debian-cloud"]
+  ssh_username           = "packer"
+  zone                   = "us-central1-a"
+  image_name             = "ops-agent-test-{{timestamp}}"
+  image_description      = "Test image for ops-agent log collection"
+  machine_type           = "e2-medium"
 }
 
 build {
@@ -26,27 +26,17 @@ build {
       "sudo apt-get update",
       "sudo apt-get install -y curl",
       
-      # Install ops-agent for Debian
+      # Install ops-agent
       "curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh",
       "sudo bash add-google-cloud-ops-agent-repo.sh --also-install",
       
-      # Create log directory
+      # Create directories
       "sudo mkdir -p /var/log/custom"
     ]
   }
 
-  provisioner "shell" {
-    inline = [
-      # Create a service user for the log generator
-      "sudo useradd -r -s /bin/false loggen",
-      "sudo mkdir -p /opt/log-generator",
-      "sudo chown loggen:loggen /opt/log-generator",
-      "sudo chown loggen:loggen /var/log/custom"
-    ]
-  }
-
   provisioner "file" {
-    source      = "../ops-agent-logs/bin/log-generator"
+    source      = "../bin/log-generator"
     destination = "/tmp/log-generator"
   }
 
@@ -57,43 +47,32 @@ build {
 
   provisioner "shell" {
     inline = [
-      # Move files to their proper locations
+      # Install log generator
+      "sudo mkdir -p /opt/log-generator",
       "sudo mv /tmp/log-generator /opt/log-generator/",
       "sudo chmod +x /opt/log-generator/log-generator",
-      "sudo chown loggen:loggen /opt/log-generator/log-generator",
       
+      # Configure ops-agent
       "sudo mv /tmp/ops_agent_config.yaml /etc/google-cloud-ops-agent/config.yaml",
       
-      # Create a systemd service for the log generator
-      "cat <<EOF | sudo tee /etc/systemd/system/log-generator.service",
+      # Create service file
+      "sudo bash -c 'cat > /etc/systemd/system/log-generator.service << EOL",
       "[Unit]",
       "Description=Log Generator Service",
       "After=network.target",
       "",
       "[Service]",
-      "Type=simple",
-      "User=loggen",
-      "Group=loggen",
       "ExecStart=/opt/log-generator/log-generator",
       "Restart=always",
-      "RestartSec=5",
-      "StandardOutput=journal",
-      "StandardError=journal",
-      "SyslogIdentifier=log-generator",
       "",
       "[Install]",
       "WantedBy=multi-user.target",
-      "EOF",
+      "EOL'",
       
-      # Enable and start services
+      # Enable services
       "sudo systemctl daemon-reload",
       "sudo systemctl enable log-generator.service",
-      "sudo systemctl start log-generator.service",
-      "sudo systemctl restart google-cloud-ops-agent",
-      
-      # Verify the services are running
-      "sudo systemctl status log-generator.service",
-      "sudo systemctl status google-cloud-ops-agent"
+      "sudo systemctl restart google-cloud-ops-agent"
     ]
   }
 }
