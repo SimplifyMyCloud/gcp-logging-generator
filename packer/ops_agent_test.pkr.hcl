@@ -36,7 +36,7 @@ build {
   }
 
   provisioner "file" {
-    source      = "../bin/log-generator"
+    source      = "../ops-agent-logs/bin/log-generator"
     destination = "/tmp/log-generator"
   }
 
