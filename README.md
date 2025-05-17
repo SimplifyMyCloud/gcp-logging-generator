@@ -23,7 +23,7 @@ The Google Cloud Operations Agent collects system metrics and application logs f
 ## Project Structure
 
 ```
-ops-agent-logs/
+gcp-logging-generator/
 ├── bin/
 │   └── log-generator             # Pre-built Go binary
 ├── cmd/
@@ -51,13 +51,13 @@ ops-agent-logs/
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/ops-agent-logs.git
-   cd ops-agent-logs
+   git clone https://github.com:SimplifyMyCloud/gcp-logging-generator.git
+   cd gcp-logging-generator
    ```
 
 2. Initialize Go modules:
    ```bash
-   go mod init ops-agent-logs
+   go mod init gcp-logging-generator
    go get github.com/google/uuid
    ```
 
@@ -131,107 +131,7 @@ metrics:
 
 ### Building the VM Image with Packer
 
-1. Create a Packer configuration file:
-   ```bash
-   mkdir -p packer
-   ```
-
-2. Create `packer/ops_agent_test.pkr.hcl` with the following content (update the project_id and service account):
-   ```hcl
-   packer {
-     required_plugins {
-       googlecompute = {
-         version = ">= 1.1.1"
-         source  = "github.com/hashicorp/googlecompute"
-       }
-     }
-   }
-
-   source "googlecompute" "ops_agent_test" {
-     project_id          = "your-project-id"  # CHANGE THIS
-     source_image_family = "debian-11"
-     zone                = "us-west1-a"
-     image_name          = "ops-agent-test-{{timestamp}}"
-     image_description   = "Test image for ops-agent log collection"
-     machine_type        = "e2-medium"
-     
-     service_account_email = "your-service-account@project-id.iam.gserviceaccount.com"  # CHANGE THIS
-     use_os_login        = true  # For organizations with requireOsLogin constraint
-     ssh_username        = "sa_username_from_oslogin"  # CHANGE THIS to your OS Login username
-     
-     ssh_timeout         = "10m"
-     
-     scopes              = [
-       "https://www.googleapis.com/auth/cloud-platform"
-     ]
-   }
-
-   build {
-     sources = ["source.googlecompute.ops_agent_test"]
-
-     provisioner "shell" {
-       pause_before = "30s"
-       inline = [
-         "sudo apt-get update",
-         "sudo apt-get install -y curl",
-         
-         # Install ops-agent
-         "curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh",
-         "sudo bash add-google-cloud-ops-agent-repo.sh --also-install",
-         
-         # Create log directory
-         "sudo mkdir -p /var/log/custom",
-         "sudo chmod 777 /var/log/custom"
-       ]
-     }
-
-     provisioner "file" {
-       source      = "../bin/log-generator"
-       destination = "/tmp/log-generator"
-     }
-
-     provisioner "file" {
-       source      = "../config/ops_agent_config.yaml"
-       destination = "/tmp/ops_agent_config.yaml"
-     }
-
-     provisioner "shell" {
-       inline = [
-         # Install log generator
-         "sudo mkdir -p /opt/log-generator",
-         "sudo mv /tmp/log-generator /opt/log-generator/",
-         "sudo chmod +x /opt/log-generator/log-generator",
-         
-         # Configure ops-agent
-         "sudo mv /tmp/ops_agent_config.yaml /etc/google-cloud-ops-agent/config.yaml",
-         "sudo chmod 640 /etc/google-cloud-ops-agent/config.yaml",
-         "sudo chown root:root /etc/google-cloud-ops-agent/config.yaml",
-         
-         # Create service file
-         "sudo bash -c 'cat > /etc/systemd/system/log-generator.service << EOL",
-         "[Unit]",
-         "Description=Log Generator Service",
-         "After=network.target",
-         "",
-         "[Service]",
-         "ExecStart=/opt/log-generator/log-generator",
-         "Restart=always",
-         "",
-         "[Install]",
-         "WantedBy=multi-user.target",
-         "EOL'",
-         
-         # Enable services
-         "sudo systemctl daemon-reload",
-         "sudo systemctl enable log-generator.service",
-         "sudo systemctl start log-generator.service",
-         "sudo systemctl restart google-cloud-ops-agent"
-       ]
-     }
-   }
-   ```
-
-3. Run Packer:
+Run Packer:
    ```bash
    cd packer
    packer init .
