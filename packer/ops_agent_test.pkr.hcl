@@ -33,9 +33,6 @@ source "googlecompute" "ops_agent_test" {
   scopes = [
     "https://www.googleapis.com/auth/cloud-platform"
   ]
-
-  # Cleanup on failure
-  on_host_failure = "cleanup"
 }
 
 build {
