@@ -8,27 +8,34 @@ packer {
 }
 
 source "googlecompute" "ops_agent_test" {
-  project_id          = "simplifymycloud-dev"  # CHANGE THIS TO YOUR PROJECT ID
+  project_id          = "simplifymycloud-dev" # Your project ID
   source_image_family = "debian-11"
-  ssh_username        = "packer"
   zone                = "us-west1-a"
   image_name          = "ops-agent-test-{{timestamp}}"
   image_description   = "Test image for ops-agent log collection"
   machine_type        = "e2-medium"
-  
-  # SSH key configuration
-  ssh_private_key_file = "~/.ssh/packer_gcp"
-  
-  # Add SSH key to the instance
-  metadata = {
-    "ssh-keys" = "packer:${file("~/.ssh/packer_gcp.pub")}"
-    "enable-oslogin" = "FALSE"
-  }
-  
+
+  # Service account configuration
+  service_account_email = "smc-packer-sa@simplifymycloud-dev.iam.gserviceaccount.com"
+
+  # OS Login configuration
+  use_os_login = true
+
+  # Use the impersonated service account for ssh_username
+  # This should be the OS Login format of your service account
+  ssh_username = "sa_packer_sa_simplifymycloud_dev_iam_gserviceaccount_com"
+
+  # Extended timeouts
+  ssh_timeout            = "10m"
+  startup_script_timeout = "5m"
+
   # Authentication scopes
-  scopes              = [
+  scopes = [
     "https://www.googleapis.com/auth/cloud-platform"
   ]
+
+  # Cleanup on failure
+  on_host_failure = "cleanup"
 }
 
 build {
@@ -39,11 +46,11 @@ build {
     inline = [
       "sudo apt-get update",
       "sudo apt-get install -y curl",
-      
+
       # Install ops-agent
       "curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh",
       "sudo bash add-google-cloud-ops-agent-repo.sh --also-install",
-      
+
       # Create directories
       "sudo mkdir -p /var/log/custom"
     ]
@@ -65,10 +72,10 @@ build {
       "sudo mkdir -p /opt/log-generator",
       "sudo mv /tmp/log-generator /opt/log-generator/",
       "sudo chmod +x /opt/log-generator/log-generator",
-      
+
       # Configure ops-agent
       "sudo mv /tmp/ops_agent_config.yaml /etc/google-cloud-ops-agent/config.yaml",
-      
+
       # Create service file
       "sudo bash -c 'cat > /etc/systemd/system/log-generator.service << EOL",
       "[Unit]",
@@ -82,7 +89,7 @@ build {
       "[Install]",
       "WantedBy=multi-user.target",
       "EOL'",
-      
+
       # Enable services
       "sudo systemctl daemon-reload",
       "sudo systemctl enable log-generator.service",
