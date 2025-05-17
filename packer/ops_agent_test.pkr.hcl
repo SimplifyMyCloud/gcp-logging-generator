@@ -29,9 +29,6 @@ source "googlecompute" "ops_agent_test" {
   scopes              = [
     "https://www.googleapis.com/auth/cloud-platform"
   ]
-  
-  # Wait longer for instance to be ready
-  startup_script_timeout = "5m"
 }
 
 build {
