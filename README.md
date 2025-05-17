@@ -1,10 +1,10 @@
 # GCP Ops-Agent Log Generator
 
-This project provides a streamlined way to test the Google Cloud Operations Agent (ops-agent) by automatically generating various log types on Google Compute Engine (GCE) VMs. The image is built using Packer and includes scripts that continuously generate structured, plain text, and error logs that are captured and processed by the ops-agent.
+This project provides a streamlined way to test the Google Cloud Operations Agent (ops-agent) by automatically generating various log types on Google Compute Engine (GCE) VMs. The image is built using Packer and includes a Go application that continuously generates structured, plain text, and error logs that are captured and processed by the ops-agent.
 
 ## Overview
 
-The Google Cloud Operations Agent collects system metrics and application logs from your VMs, making them available for analysis in Google Cloud Logging and Monitoring. This project helps you test and validate your ops-agent configuration by generating predictable log patterns.
+The Google Cloud Operations Agent collects system metrics and application logs from your VMs, making them available for analysis in Google Cloud Logging and Monitoring. This project helps you test and validate your ops-agent configuration by generating predictable log patterns that can be monitored in your GCP environment.
 
 ## Features
 
@@ -15,71 +15,238 @@ The Google Cloud Operations Agent collects system metrics and application logs f
 
 - **Packer Integration**: Fully automated VM image creation with all necessary components
   - Installs and configures the Google Cloud Operations Agent
-  - Deploys log generation scripts
+  - Deploys the Go log generator application
   - Sets up systemd service for automatic startup
 
 - **Ops-Agent Configuration**: Includes a pre-configured ops-agent setup that collects all generated logs
+
+## Project Structure
+
+```
+ops-agent-logs/
+├── bin/
+│   └── log-generator             # Pre-built Go binary
+├── cmd/
+│   └── log-generator/
+│       └── main.go               # Go source code
+├── config/
+│   └── ops_agent_config.yaml     # Ops-agent configuration
+├── go.mod                        # Go module definition
+├── go.sum                        # Go module dependencies
+├── packer/
+│   └── ops_agent_test.pkr.hcl    # Packer configuration
+└── README.md
+```
 
 ## Getting Started
 
 ### Prerequisites
 
 - Google Cloud Platform account with appropriate permissions
-- [Packer](https://www.packer.io/downloads) installed locally
-- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) configured with your project
+- Go 1.16 or later installed locally
+- Packer 1.8 or later installed locally
+- Google Cloud SDK configured with your project
 
-### Project Structure
-
-```
-.
-├── packer/
-│   └── ops_agent_test.pkr.hcl    # Packer configuration
-├── scripts/
-│   ├── log_generator.sh          # Bash log generator
-│   └── log_generator.go          # Go log generator (alternative)
-├── config/
-│   └── ops_agent_config.yaml     # Ops-agent configuration
-└── README.md
-```
-
-### Building the VM Image
+### Building the Go Binary
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/ops-agent-log-generator.git
-   cd ops-agent-log-generator
+   git clone https://github.com/yourusername/ops-agent-logs.git
+   cd ops-agent-logs
    ```
 
-2. Update the Packer configuration with your GCP project ID:
+2. Initialize Go modules:
+   ```bash
+   go mod init ops-agent-logs
+   go get github.com/google/uuid
+   ```
+
+3. Build the Go binary:
+   ```bash
+   GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/log-generator ./cmd/log-generator
+   ```
+
+### Creating the Ops-Agent Configuration
+
+Create the ops-agent configuration file:
+
+```bash
+mkdir -p config
+```
+
+Add the following content to `config/ops_agent_config.yaml`:
+
+```yaml
+logging:
+  receivers:
+    structured_logs:
+      type: files
+      include_paths:
+        - /var/log/custom/structured.log
+      parser: json
+    
+    plain_logs:
+      type: files
+      include_paths:
+        - /var/log/custom/plain.log
+      
+    error_logs:
+      type: files
+      include_paths:
+        - /var/log/custom/error.log
+      
+  service:
+    pipelines:
+      structured_pipeline:
+        receivers:
+          - structured_logs
+      
+      plain_pipeline:
+        receivers:
+          - plain_logs
+      
+      error_pipeline:
+        receivers:
+          - error_logs
+
+metrics:
+  receivers:
+    hostmetrics:
+      type: hostmetrics
+      collection_interval: 60s
+  
+  processors:
+    metrics_filter:
+      type: exclude_metrics
+      metrics_pattern: []
+  
+  service:
+    pipelines:
+      default_pipeline:
+        receivers:
+          - hostmetrics
+        processors:
+          - metrics_filter
+```
+
+### Building the VM Image with Packer
+
+1. Create a Packer configuration file:
+   ```bash
+   mkdir -p packer
+   ```
+
+2. Create `packer/ops_agent_test.pkr.hcl` with the following content (update the project_id and service account):
    ```hcl
-   # In packer/ops_agent_test.pkr.hcl
+   packer {
+     required_plugins {
+       googlecompute = {
+         version = ">= 1.1.1"
+         source  = "github.com/hashicorp/googlecompute"
+       }
+     }
+   }
+
    source "googlecompute" "ops_agent_test" {
-     project_id = "your-project-id"  # Update this line
-     # ... other settings
+     project_id          = "your-project-id"  # CHANGE THIS
+     source_image_family = "debian-11"
+     zone                = "us-west1-a"
+     image_name          = "ops-agent-test-{{timestamp}}"
+     image_description   = "Test image for ops-agent log collection"
+     machine_type        = "e2-medium"
+     
+     service_account_email = "your-service-account@project-id.iam.gserviceaccount.com"  # CHANGE THIS
+     use_os_login        = true  # For organizations with requireOsLogin constraint
+     ssh_username        = "sa_username_from_oslogin"  # CHANGE THIS to your OS Login username
+     
+     ssh_timeout         = "10m"
+     
+     scopes              = [
+       "https://www.googleapis.com/auth/cloud-platform"
+     ]
+   }
+
+   build {
+     sources = ["source.googlecompute.ops_agent_test"]
+
+     provisioner "shell" {
+       pause_before = "30s"
+       inline = [
+         "sudo apt-get update",
+         "sudo apt-get install -y curl",
+         
+         # Install ops-agent
+         "curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh",
+         "sudo bash add-google-cloud-ops-agent-repo.sh --also-install",
+         
+         # Create log directory
+         "sudo mkdir -p /var/log/custom",
+         "sudo chmod 777 /var/log/custom"
+       ]
+     }
+
+     provisioner "file" {
+       source      = "../bin/log-generator"
+       destination = "/tmp/log-generator"
+     }
+
+     provisioner "file" {
+       source      = "../config/ops_agent_config.yaml"
+       destination = "/tmp/ops_agent_config.yaml"
+     }
+
+     provisioner "shell" {
+       inline = [
+         # Install log generator
+         "sudo mkdir -p /opt/log-generator",
+         "sudo mv /tmp/log-generator /opt/log-generator/",
+         "sudo chmod +x /opt/log-generator/log-generator",
+         
+         # Configure ops-agent
+         "sudo mv /tmp/ops_agent_config.yaml /etc/google-cloud-ops-agent/config.yaml",
+         "sudo chmod 640 /etc/google-cloud-ops-agent/config.yaml",
+         "sudo chown root:root /etc/google-cloud-ops-agent/config.yaml",
+         
+         # Create service file
+         "sudo bash -c 'cat > /etc/systemd/system/log-generator.service << EOL",
+         "[Unit]",
+         "Description=Log Generator Service",
+         "After=network.target",
+         "",
+         "[Service]",
+         "ExecStart=/opt/log-generator/log-generator",
+         "Restart=always",
+         "",
+         "[Install]",
+         "WantedBy=multi-user.target",
+         "EOL'",
+         
+         # Enable services
+         "sudo systemctl daemon-reload",
+         "sudo systemctl enable log-generator.service",
+         "sudo systemctl start log-generator.service",
+         "sudo systemctl restart google-cloud-ops-agent"
+       ]
+     }
    }
    ```
 
-3. Build the image with Packer:
+3. Run Packer:
    ```bash
    cd packer
+   packer init .
    packer build ops_agent_test.pkr.hcl
    ```
 
-4. Deploy VMs using the generated image via the Google Cloud Console or gcloud CLI:
-   ```bash
-   gcloud compute instances create ops-agent-test-1 \
-     --image=ops-agent-test-[timestamp] \
-     --image-project=your-project-id \
-     --zone=us-central1-a
-   ```
+## Deploying VMs Using the Image
 
-### Verifying Log Generation
+After Packer successfully builds the image, you can deploy VMs using it:
 
-1. After deploying a VM from the image, logs will automatically start generating
-2. View the logs in Google Cloud Logging by:
-   - Navigating to the Google Cloud Console
-   - Selecting "Logging" > "Logs Explorer"
-   - Filtering for your VM instance
+```bash
+gcloud compute instances create ops-agent-test-1 \
+  --image=ops-agent-test-[timestamp] \
+  --zone=us-west1-a
+```
 
 ## Log Types Generated
 
@@ -105,57 +272,84 @@ The Google Cloud Operations Agent collects system metrics and application logs f
 [2025-05-16 12:34:56] [ERROR] Connection timeout. Reference: ERR-a1b2c3d4
 ```
 
-## Customization
-
-### Modifying Log Content
-
-You can customize the log content by editing either:
-- `scripts/log_generator.sh` (Bash version)
-- `scripts/log_generator.go` (Go version)
-
-### Changing Log Frequency
-
-To adjust how often logs are generated:
-- In the Bash script: Modify the `sleep` values in each function
-- In the Go script: Change the `time.Sleep()` durations
-
-### Customizing Ops-Agent Configuration
-
-The ops-agent configuration is located at `config/ops_agent_config.yaml`. You can modify this file to:
-- Change log collection patterns
-- Adjust parsing rules
-- Configure additional metrics collection
-
 ## Troubleshooting
 
-### Checking Service Status
+### Common Issues and Solutions
 
-SSH into your VM and verify that both services are running:
-```bash
-sudo systemctl status log-generator.service
-sudo systemctl status google-cloud-ops-agent
-```
+#### SSH Authentication Issues with OS Login
+If you're using OS Login (required by organizational policy constraints), ensure:
 
-### Viewing Local Log Files
+1. Your service account has the proper roles:
+   ```bash
+   gcloud projects add-iam-policy-binding your-project-id \
+     --member="serviceAccount:your-service-account@project-id.iam.gserviceaccount.com" \
+     --role="roles/compute.osLogin"
+   ```
 
-You can check if logs are being generated by examining the local files:
-```bash
-sudo cat /var/log/custom/structured.log
-sudo cat /var/log/custom/plain.log
-sudo cat /var/log/custom/error.log
-```
+2. Find your OS Login username for the service account:
+   ```bash
+   gcloud compute os-login describe-profile --impersonate-service-account=your-service-account@project-id.iam.gserviceaccount.com
+   ```
 
-### Restarting Services
+3. Update the `ssh_username` in your Packer config with this value
 
-If logs aren't being generated or collected:
-```bash
-sudo systemctl restart log-generator.service
-sudo systemctl restart google-cloud-ops-agent
-```
+#### Ops-Agent Service Failures
 
-## Contributing
+If the ops-agent service fails to start, check:
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Validate the ops-agent configuration:
+   ```bash
+   sudo google-cloud-ops-agent validate-config
+   ```
+
+2. Check the service logs:
+   ```bash
+   sudo journalctl -u google-cloud-ops-agent --no-pager
+   ```
+
+3. Verify file permissions:
+   ```bash
+   ls -la /var/log/custom/
+   sudo chmod 755 /var/log/custom
+   ```
+
+### Verifying Log Collection
+
+To verify that logs are being collected:
+
+1. SSH into the VM:
+   ```bash
+   gcloud compute ssh ops-agent-test-1 --zone=us-west1-a
+   ```
+
+2. Check that logs are being generated:
+   ```bash
+   ls -la /var/log/custom/
+   tail /var/log/custom/structured.log
+   ```
+
+3. Verify the ops-agent is running:
+   ```bash
+   sudo systemctl status google-cloud-ops-agent
+   ```
+
+4. In the Google Cloud Console, navigate to "Logging" > "Logs Explorer" and filter for your VM instance
+
+## Customization
+
+### Modifying Log Content and Frequency
+
+Edit the Go code in `cmd/log-generator/main.go` to customize:
+- Log content and format
+- Frequency of log generation (adjust the `time.Sleep()` values)
+- Types of errors and status codes generated
+
+### Changing Ops-Agent Configuration
+
+Modify `config/ops_agent_config.yaml` to:
+- Adjust parsing rules
+- Change pipeline configuration
+- Add other log sources or metrics collectors
 
 ## License
 
@@ -163,5 +357,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Google Cloud Operations Agent documentation and team
-- Packer by HashiCorp
+- Google Cloud Operations Agent team
+- HashiCorp Packer
