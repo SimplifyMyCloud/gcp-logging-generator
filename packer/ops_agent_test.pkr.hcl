@@ -25,10 +25,6 @@ source "googlecompute" "ops_agent_test" {
   # This should be the OS Login format of your service account
   ssh_username = "sa_packer_sa_simplifymycloud_dev_iam_gserviceaccount_com"
 
-  # Extended timeouts
-  ssh_timeout            = "10m"
-  startup_script_timeout = "5m"
-
   # Authentication scopes
   scopes = [
     "https://www.googleapis.com/auth/cloud-platform"
